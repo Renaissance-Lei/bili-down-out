@@ -1,8 +1,11 @@
 package cn.a10miaomiao.bilidown.ui.components
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -19,10 +22,15 @@ import cn.a10miaomiao.bilidown.entity.DownloadInfo
 import cn.a10miaomiao.bilidown.entity.DownloadType
 import coil.compose.AsyncImage
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun DownloadListItem(
     item: DownloadInfo,
-    onClick: () -> Unit
+    isSelectionMode: Boolean = false,
+    isSelected: Boolean = false,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit = {},
+    onSelectToggle: () -> Unit = {},
 ) {
     Box(
         modifier = Modifier.padding(5.dp),
@@ -30,16 +38,39 @@ fun DownloadListItem(
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(10.dp),
-            color = MaterialTheme.colorScheme.secondaryContainer
+            color = if (isSelected) {
+                MaterialTheme.colorScheme.primaryContainer
+            } else {
+                MaterialTheme.colorScheme.secondaryContainer
+            }
         ) {
             Column() {
                 Row(
                     modifier = Modifier
-                        .clickable(onClick = onClick)
+                        .combinedClickable(
+                            onClick = {
+                                if (isSelectionMode) {
+                                    onSelectToggle()
+                                } else {
+                                    onClick()
+                                }
+                            },
+                            onLongClick = {
+                                onLongClick()
+                            }
+                        )
                         .padding(10.dp)
                         .fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    if (isSelectionMode) {
+                        Checkbox(
+                            checked = isSelected,
+                            onCheckedChange = { onSelectToggle() },
+                            modifier = Modifier.size(48.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
                     AsyncImage(
                         model = UrlUtil.autoHttps(item.cover) + "@672w_378h_1c_",
                         contentDescription = item.title,
