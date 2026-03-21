@@ -35,6 +35,13 @@ class BiliDownService :
     Service(),
     CoroutineScope {
 
+    data class TaskInfo(
+        val entryDirPath: String,
+        val outFilePath: String,
+        val title: String,
+        val cover: String,
+    )
+
     companion object {
         private const val TAG = "DownloadService"
         private val channel = Channel<BiliDownService>()
@@ -648,6 +655,44 @@ class BiliDownService :
             } else {
                 toast("该视频已在队列中：${record.title}")
             }
+        }
+    }
+
+    suspend fun addTasks(
+        tasks: List<TaskInfo>,
+    ) {
+        val outRecordDao = appDatabase.outRecordDao()
+        var addedCount = 0
+        var skippedCount = 0
+        for (task in tasks) {
+            val record = outRecordDao.findByPath(task.entryDirPath)
+            val currentTime = System.currentTimeMillis()
+            if (record == null) {
+                val newRecord = OutRecord(
+                    entryDirPath = task.entryDirPath,
+                    outFilePath = task.outFilePath,
+                    title = task.title,
+                    cover = task.cover,
+                    status = OutRecord.STATUS_WAIT,
+                    type = 1,
+                    createTime = currentTime,
+                    updateTime = currentTime,
+                )
+                outRecordDao.insertAll(newRecord)
+                addedCount++
+            } else {
+                skippedCount++
+            }
+        }
+        if (addedCount > 0) {
+            val msg = if (skippedCount > 0) {
+                "已添加 ${addedCount} 个任务，跳过 ${skippedCount} 个已有任务"
+            } else {
+                "已添加 ${addedCount} 个任务"
+            }
+            toast(msg)
+        } else {
+            toast("所选视频均已导出或在队列中")
         }
     }
 
