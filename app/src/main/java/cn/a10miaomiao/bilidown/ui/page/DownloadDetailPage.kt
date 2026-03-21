@@ -211,10 +211,11 @@ fun DownloadDetailPagePresenter(
                     it.items.map { item ->
                         val fileName = item.title.replace(" ", "") + ".mp4"
                         val outFile = BiliDownOutFile(fileName)
+                        outFile.autoRename()
                         BiliDownService.TaskInfo(
                             entryDirPath = item.dir_path,
                             outFilePath = outFile.path,
-                            title = item.title,
+                            title = outFile.name,
                             cover = item.cover,
                         )
                     }
