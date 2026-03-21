@@ -39,14 +39,15 @@ class BiliDownOutFile(
 
     fun exists() = file.exists()
 
-    fun autoRename() {
-        var newFile = File(outDir, name)
-        var count = 1
-        val extensionIndex = name.lastIndexOf('.')
-        val baseName = if (extensionIndex > 0) name.substring(0, extensionIndex) else name
-        val extension = if (extensionIndex > 0) name.substring(extensionIndex) else ""
+    fun autoRename(additionalUsedPaths: Set<String> = emptySet()) {
+        val originalName = file.name
+        val extensionIndex = originalName.lastIndexOf('.')
+        val baseName = if (extensionIndex > 0) originalName.substring(0, extensionIndex) else originalName
+        val extension = if (extensionIndex > 0) originalName.substring(extensionIndex) else ""
 
-        while (newFile.exists()) {
+        var newFile = file
+        var count = 1
+        while (newFile.exists() || additionalUsedPaths.contains(newFile.path)) {
             val newName = "$baseName($count)$extension"
             newFile = File(outDir, newName)
             count++

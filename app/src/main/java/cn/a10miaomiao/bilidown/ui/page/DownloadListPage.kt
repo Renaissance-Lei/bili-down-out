@@ -245,12 +245,7 @@ fun DownloadListPagePresenter(
                     it.items.map { item ->
                         val fileName = item.title.replace(" ", "") + ".mp4"
                         val outFile = BiliDownOutFile(fileName)
-                        outFile.autoRename()
-                        
-                        // 确保同一次批量导出中不会出现重名
-                        while (usedPaths.contains(outFile.path)) {
-                            outFile.autoRename()
-                        }
+                        outFile.autoRename(usedPaths)
                         usedPaths.add(outFile.path)
 
                         BiliDownService.TaskInfo(
