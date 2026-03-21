@@ -9,17 +9,27 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -242,6 +252,22 @@ fun DownloadListPage(
         DownloadListPagePresenter(context, it)
     }
 
+    // 搜索状态
+    var searchQuery by remember { mutableStateOf("") }
+    var isSearchVisible by remember { mutableStateOf(false) }
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    // 根据搜索关键字过滤列表
+    val filteredList = remember(state.list, searchQuery) {
+        if (searchQuery.isBlank()) {
+            state.list
+        } else {
+            state.list.filter { info ->
+                info.title.contains(searchQuery, ignoreCase = true)
+            }
+        }
+    }
+
     LaunchedEffect(
         packageName,
         permissionState.isGranted,
@@ -303,125 +329,199 @@ fun DownloadListPage(
         isGranted = permissionState.isGranted,
         onDismiss = { showPermissionDialog = false }
     )
-    SwipeToRefresh(
-        refreshing = state.refreshing,
-        onRefresh = {
-            channel.trySend(
-                DownloadListPageAction.RefreshList(
-                    packageName = packageName,
-                    enabledShizuku = shizukuPermissionState.isEnabled,
-                )
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        // 搜索栏
+        if (isSearchVisible) {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                placeholder = { Text("搜索视频标题...") },
+                leadingIcon = {
+                    Icon(Icons.Filled.Search, contentDescription = "搜索")
+                },
+                trailingIcon = {
+                    IconButton(onClick = {
+                        searchQuery = ""
+                        isSearchVisible = false
+                        keyboardController?.hide()
+                    }) {
+                        Icon(Icons.Filled.Close, contentDescription = "关闭搜索")
+                    }
+                },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(
+                    onSearch = { keyboardController?.hide() }
+                ),
             )
-        },
-    ) {
-       if (state.list.isEmpty()) {
-            Column(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                if (state.loading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(40.dp),
-                        strokeWidth = 4.dp,
+        }
+
+        SwipeToRefresh(
+            refreshing = state.refreshing,
+            onRefresh = {
+                channel.trySend(
+                    DownloadListPageAction.RefreshList(
+                        packageName = packageName,
+                        enabledShizuku = shizukuPermissionState.isEnabled,
                     )
-                    Spacer(modifier = Modifier.height(20.dp))
-                    Text(
-                        "正在读取列表",
-                        color = MaterialTheme.colorScheme.outline,
-                    )
-                } else if (!permissionState.isGranted || !permissionState.isExternalStorage) {
-                    Column(
-                        modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.Center,
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        if (permissionState.isGranted) {
-                            Text(text = "请授予所有文件的存储权限")
-                            Spacer(modifier = Modifier.height(20.dp))
-                            Button(
-                                onClick = {
-                                    storagePermission.requestPermissions(::resultCallBack)
-                                }
-                            ) {
-                                Text(text = "授予所有文件的权限")
-                            }
-                        } else {
-                            Text(text = "请授予存储权限")
-                            Spacer(modifier = Modifier.height(20.dp))
-                            Button(
-                                onClick = {
-                                    storagePermission.requestPermissions(::resultCallBack)
-                                }
-                            ) {
-                                Text(text = "授予权限")
-                            }
-                        }
-                    }
-                } else if (!state.canRead) {
-                    Text(text = "请授予文件夹权限")
-                    Spacer(modifier = Modifier.height(20.dp))
-                    Button(
-                        onClick = {
-                            val biliDownFile = BiliDownFile(context, packageName, shizukuPermissionState.isEnabled)
-                            biliDownFile.startFor(2)
-                        }
-                    ) {
-                        Text(text = "授予权限")
-                    }
-                    TextButton(
-                        onClick = {
-                            navController.navigate(BiliDownScreen.More.route) {
-                                popUpTo(navController.graph.findStartDestination().id) {
-                                    saveState = true
-                                }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        }
-                    ) {
-                        Text(text = "或使用Shizuku")
-                    }
-                } else if (state.failMessage.isNotBlank()) {
-                    Text(
-                        text = state.failMessage,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(20.dp)
-                    )
-                    if ("Shizuku" in state.failMessage) {
-                        TextButton(
-                            onClick = ::openShizuku,
+                )
+            },
+        ) {
+           if (state.list.isEmpty()) {
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    if (state.loading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(40.dp),
+                            strokeWidth = 4.dp,
+                        )
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Text(
+                            "正在读取列表",
+                            color = MaterialTheme.colorScheme.outline,
+                        )
+                    } else if (!permissionState.isGranted || !permissionState.isExternalStorage) {
+                        Column(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalArrangement = Arrangement.Center,
+                            horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
-                            Text(text = "跳转Shizuku")
+                            if (permissionState.isGranted) {
+                                Text(text = "请授予所有文件的存储权限")
+                                Spacer(modifier = Modifier.height(20.dp))
+                                Button(
+                                    onClick = {
+                                        storagePermission.requestPermissions(::resultCallBack)
+                                    }
+                                ) {
+                                    Text(text = "授予所有文件的权限")
+                                }
+                            } else {
+                                Text(text = "请授予存储权限")
+                                Spacer(modifier = Modifier.height(20.dp))
+                                Button(
+                                    onClick = {
+                                        storagePermission.requestPermissions(::resultCallBack)
+                                    }
+                                ) {
+                                    Text(text = "授予权限")
+                                }
+                            }
+                        }
+                    } else if (!state.canRead) {
+                        Text(text = "请授予文件夹权限")
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Button(
+                            onClick = {
+                                val biliDownFile = BiliDownFile(context, packageName, shizukuPermissionState.isEnabled)
+                                biliDownFile.startFor(2)
+                            }
+                        ) {
+                            Text(text = "授予权限")
+                        }
+                        TextButton(
+                            onClick = {
+                                navController.navigate(BiliDownScreen.More.route) {
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            }
+                        ) {
+                            Text(text = "或使用Shizuku")
+                        }
+                    } else if (state.failMessage.isNotBlank()) {
+                        Text(
+                            text = state.failMessage,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(20.dp)
+                        )
+                        if ("Shizuku" in state.failMessage) {
+                            TextButton(
+                                onClick = ::openShizuku,
+                            ) {
+                                Text(text = "跳转Shizuku")
+                            }
+                        }
+                    } else {
+                        Image(
+                            painter = painterResource(id = R.drawable.ic_movie_pay_area_limit),
+                            contentDescription = "空空如也",
+                            modifier = Modifier.size(200.dp, 200.dp)
+                        )
+                        Text(
+                            modifier = Modifier.padding(vertical = 8.dp),
+                            text = "空空如也",
+                        )
+                    }
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 80.dp),
+                ) {
+                    // 搜索按钮（列表顶部）
+                    if (!isSearchVisible) {
+                        item {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 10.dp, vertical = 2.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = "共 ${state.list.size} 个视频",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.outline,
+                                )
+                                IconButton(onClick = { isSearchVisible = true }) {
+                                    Icon(
+                                        Icons.Filled.Search,
+                                        contentDescription = "搜索",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                    )
+                                }
+                            }
                         }
                     }
-                } else {
-                    Image(
-                        painter = painterResource(id = R.drawable.ic_movie_pay_area_limit),
-                        contentDescription = "空空如也",
-                        modifier = Modifier.size(200.dp, 200.dp)
-                    )
-                    Text(
-                        modifier = Modifier.padding(vertical = 8.dp),
-                        text = "空空如也",
-                    )
-                }
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 80.dp),
-            ) {
-                items(state.list, { it.dir_path }) {
-                    DownloadListItem(
-                        item = it,
-                        onClick = {
-                            val dirPath = Uri.encode(it.dir_path)
-                            navController.navigate(
-                                BiliDownScreen.Detail.route + "?packageName=${packageName}&dirPath=${dirPath}"
-                            )
+
+                    if (searchQuery.isNotBlank() && filteredList.isEmpty()) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(40.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = "没有找到匹配的视频",
+                                    color = MaterialTheme.colorScheme.outline,
+                                )
+                            }
                         }
-                    )
+                    }
+
+                    items(filteredList, { it.dir_path }) {
+                        DownloadListItem(
+                            item = it,
+                            onClick = {
+                                val dirPath = Uri.encode(it.dir_path)
+                                navController.navigate(
+                                    BiliDownScreen.Detail.route + "?packageName=${packageName}&dirPath=${dirPath}"
+                                )
+                            }
+                        )
+                    }
                 }
             }
         }
