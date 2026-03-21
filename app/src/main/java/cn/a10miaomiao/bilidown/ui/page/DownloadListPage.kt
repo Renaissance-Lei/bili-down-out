@@ -240,11 +240,19 @@ fun DownloadListPagePresenter(
 
             is DownloadListPageAction.BatchExport -> {
                 val biliDownService = BiliDownService.getService(context)
+                val usedPaths = mutableSetOf<String>()
                 biliDownService.addTasks(
                     it.items.map { item ->
                         val fileName = item.title.replace(" ", "") + ".mp4"
                         val outFile = BiliDownOutFile(fileName)
                         outFile.autoRename()
+                        
+                        // 确保同一次批量导出中不会出现重名
+                        while (usedPaths.contains(outFile.path)) {
+                            outFile.autoRename()
+                        }
+                        usedPaths.add(outFile.path)
+
                         BiliDownService.TaskInfo(
                             entryDirPath = item.dir_path,
                             outFilePath = outFile.path,
