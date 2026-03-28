@@ -44,6 +44,7 @@ import cn.a10miaomiao.bilidown.R
 import cn.a10miaomiao.bilidown.common.BiliDownFile
 import cn.a10miaomiao.bilidown.common.BiliDownOutFile
 import cn.a10miaomiao.bilidown.common.BiliDownUtils
+import cn.a10miaomiao.bilidown.common.ListPageBatchExportFileNameResolver
 import cn.a10miaomiao.bilidown.common.MiaoLog
 import cn.a10miaomiao.bilidown.common.datastore.DataStoreKeys
 import cn.a10miaomiao.bilidown.common.datastore.rememberDataStorePreferencesFlow
@@ -90,7 +91,7 @@ sealed class DownloadListPageAction {
     ) : DownloadListPageAction()
 
     class BatchExport(
-        val items: List<DownloadItemInfo>,
+        val groups: List<DownloadInfo>,
     ) : DownloadListPageAction()
 }
 
@@ -241,9 +242,11 @@ fun DownloadListPagePresenter(
             is DownloadListPageAction.BatchExport -> {
                 val biliDownService = BiliDownService.getService(context)
                 val usedPaths = mutableSetOf<String>()
+                val resolvedNames = ListPageBatchExportFileNameResolver.resolve(it.groups)
                 biliDownService.addTasks(
-                    it.items.map { item ->
-                        val fileName = item.title.replace(" ", "") + ".mp4"
+                    it.groups.flatMap { group -> group.items }.map { item ->
+                        val fileName = resolvedNames[item.dir_path]
+                            ?: item.title.replace(" ", "") + ".mp4"
                         val outFile = BiliDownOutFile(fileName)
                         outFile.autoRename(usedPaths)
                         usedPaths.add(outFile.path)
@@ -659,10 +662,10 @@ fun DownloadListPage(
                         Button(
                             onClick = {
                                 // 收集所有选中视频组的子项
-                                val allItems = selectedItems.values
-                                    .flatMap { it.items }
                                 channel.trySend(
-                                    DownloadListPageAction.BatchExport(allItems)
+                                    DownloadListPageAction.BatchExport(
+                                        selectedItems.values.toList()
+                                    )
                                 )
                                 isSelectionMode = false
                                 selectedItems.clear()
