@@ -12,12 +12,15 @@ object ListPageBatchExportFileNameResolver {
 
     private val trailingSuffixRegex = Regex("^(.*)\\((\\d+)\\)$")
 
-    fun resolve(groups: List<DownloadInfo>): Map<String, String> {
+    fun resolve(
+        groups: List<DownloadInfo>,
+        includeOwnerPrefix: Boolean = false,
+    ): Map<String, String> {
         if (groups.isEmpty()) {
             return emptyMap()
         }
         val duplicateTitleCounts = groups
-            .map { sanitizeTitle(it.title) }
+            .map { buildGroupTitle(it, includeOwnerPrefix) }
             .groupingBy { it }
             .eachCount()
         val duplicateTitleIndexes = mutableMapOf<String, Int>()
@@ -25,7 +28,7 @@ object ListPageBatchExportFileNameResolver {
         val resolvedNames = linkedMapOf<String, String>()
 
         groups.forEach { group ->
-            val groupTitle = sanitizeTitle(group.title)
+            val groupTitle = buildGroupTitle(group, includeOwnerPrefix)
             val duplicateIndex = duplicateTitleIndexes[groupTitle] ?: 0
             duplicateTitleIndexes[groupTitle] = duplicateIndex + 1
 
@@ -95,8 +98,28 @@ object ListPageBatchExportFileNameResolver {
         }
     }
 
+    private fun buildGroupTitle(
+        group: DownloadInfo,
+        includeOwnerPrefix: Boolean,
+    ): String {
+        val title = sanitizeTitle(group.title)
+        if (!includeOwnerPrefix) {
+            return title
+        }
+        val ownerName = sanitizeOwnerName(group.ownerName)
+        return if (ownerName.isBlank()) {
+            title
+        } else {
+            "\u3010$ownerName\u3011$title"
+        }
+    }
+
     private fun sanitizeTitle(title: String): String {
         return title.replace(" ", "").ifBlank { "video" }
+    }
+
+    private fun sanitizeOwnerName(ownerName: String): String {
+        return ownerName.replace(" ", "")
     }
 
     private fun splitTitle(title: String): TitleParts {

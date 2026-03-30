@@ -257,7 +257,8 @@ fun OutListPage(
             state.recordList
         } else {
             state.recordList.filter {
-                it.title.contains(searchQuery, ignoreCase = true)
+                it.title.contains(searchQuery, ignoreCase = true) ||
+                    it.ownerName.contains(searchQuery, ignoreCase = true)
             }
         }
     }

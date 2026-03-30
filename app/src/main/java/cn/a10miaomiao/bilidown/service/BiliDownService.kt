@@ -39,6 +39,7 @@ class BiliDownService :
         val entryDirPath: String,
         val outFilePath: String,
         val title: String,
+        val ownerName: String,
         val cover: String,
     )
 
@@ -428,6 +429,7 @@ class BiliDownService :
             currentStatus.entryDirPath,
             outFile.path,
             outFile.name,
+            readOwnerName(currentStatus.entryDirPath),
             currentStatus.cover,
             status = OutRecord.STATUS_SUCCESS
         )
@@ -444,6 +446,7 @@ class BiliDownService :
             currentStatus.entryDirPath,
             outFile.path,
             outFile.name,
+            readOwnerName(currentStatus.entryDirPath),
             currentStatus.cover,
             status = OutRecord.STATUS_SUCCESS
         )
@@ -481,6 +484,7 @@ class BiliDownService :
                         currentStatus.entryDirPath,
                         outFile.path,
                         outFile.name,
+                        readOwnerName(currentStatus.entryDirPath),
                         currentStatus.cover,
                         status = OutRecord.STATUS_SUCCESS
                     )
@@ -531,6 +535,7 @@ class BiliDownService :
                         currentStatus.entryDirPath,
                         outFile.path,
                         outFile.name,
+                        readOwnerName(currentStatus.entryDirPath),
                         currentStatus.cover,
                         status = OutRecord.STATUS_SUCCESS
                     )
@@ -549,6 +554,7 @@ class BiliDownService :
         entryDirPath: String,
         outFilePath: String,
         title: String,
+        ownerName: String,
         cover: String,
         status: Int,
         message: String? = null,
@@ -561,6 +567,7 @@ class BiliDownService :
                 entryDirPath = entryDirPath,
                 outFilePath = outFilePath,
                 title = title,
+                ownerName = ownerName,
                 cover = cover,
                 status = status,
                 type = 1,
@@ -574,6 +581,7 @@ class BiliDownService :
                 entryDirPath = entryDirPath,
                 outFilePath = outFilePath,
                 title = title,
+                ownerName = ownerName,
                 cover = cover,
                 status = status,
                 message = message,
@@ -591,7 +599,11 @@ class BiliDownService :
     ) {
         launch {
             putOutRecord(
-                entryDirPath, outFilePath, title, cover,
+                entryDirPath,
+                outFilePath,
+                title,
+                readOwnerName(entryDirPath),
+                cover,
                 status = OutRecord.STATUS_SUCCESS
             )
         }
@@ -621,6 +633,7 @@ class BiliDownService :
                 task.entryDirPath,
                 task.outFilePath,
                 task.title,
+                task.ownerName,
                 task.cover,
                 status = OutRecord.STATUS_IN_PROGRESS
             )
@@ -631,6 +644,7 @@ class BiliDownService :
         entryDirPath: String,
         outFilePath: String,
         title: String,
+        ownerName: String,
         cover: String,
     ) {
         val outRecordDao = appDatabase.outRecordDao()
@@ -641,6 +655,7 @@ class BiliDownService :
                 entryDirPath = entryDirPath,
                 outFilePath = outFilePath,
                 title = title,
+                ownerName = ownerName,
                 cover = cover,
                 status = OutRecord.STATUS_WAIT,
                 type = 1,
@@ -672,6 +687,7 @@ class BiliDownService :
                     entryDirPath = task.entryDirPath,
                     outFilePath = task.outFilePath,
                     title = task.title,
+                    ownerName = task.ownerName,
                     cover = task.cover,
                     status = OutRecord.STATUS_WAIT,
                     type = 1,
@@ -740,6 +756,30 @@ class BiliDownService :
             "已删除 ${tasks.size} 条记录"
         }
         toast(message)
+    }
+
+    private fun readOwnerName(entryDirPath: String): String {
+        return try {
+            val json = Json { ignoreUnknownKeys = true }
+            if (entryDirPath.startsWith("content:")) {
+                val entryDirFile = DocumentFile.fromTreeUri(this, Uri.parse(entryDirPath)) ?: return ""
+                val entryJsonFile = MiaoDocumentFile(this, entryDirFile, "/entry.json")
+                if (!entryJsonFile.exists()) {
+                    return ""
+                }
+                val entry = json.decodeFromString<BiliDownloadEntryInfo>(entryJsonFile.readText())
+                entry.owner_name.orEmpty()
+            } else {
+                val entryJsonFile = File(entryDirPath, "entry.json")
+                if (!entryJsonFile.exists()) {
+                    return ""
+                }
+                val entry = json.decodeFromString<BiliDownloadEntryInfo>(entryJsonFile.readText())
+                entry.owner_name.orEmpty()
+            }
+        } catch (_: Exception) {
+            ""
+        }
     }
 
     private suspend fun toast(message: String) {

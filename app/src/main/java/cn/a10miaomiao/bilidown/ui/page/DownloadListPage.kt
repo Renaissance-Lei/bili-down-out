@@ -1,13 +1,22 @@
 package cn.a10miaomiao.bilidown.ui.page
 
-import android.Manifest
 import android.content.Context
 import android.net.Uri
-import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardActions
@@ -17,8 +26,9 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -27,7 +37,13 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -36,18 +52,13 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
-import cn.a10miaomiao.bilidown.BiliDownApp
 import cn.a10miaomiao.bilidown.R
 import cn.a10miaomiao.bilidown.common.BiliDownFile
 import cn.a10miaomiao.bilidown.common.BiliDownOutFile
-import cn.a10miaomiao.bilidown.common.BiliDownUtils
 import cn.a10miaomiao.bilidown.common.ListPageBatchExportFileNameResolver
 import cn.a10miaomiao.bilidown.common.MiaoLog
-import cn.a10miaomiao.bilidown.common.datastore.DataStoreKeys
-import cn.a10miaomiao.bilidown.common.datastore.rememberDataStorePreferencesFlow
 import cn.a10miaomiao.bilidown.common.lifecycle.LaunchedLifecycleObserver
 import cn.a10miaomiao.bilidown.common.localStoragePermission
 import cn.a10miaomiao.bilidown.common.molecule.collectAction
@@ -57,7 +68,6 @@ import cn.a10miaomiao.bilidown.entity.DownloadItemInfo
 import cn.a10miaomiao.bilidown.entity.DownloadType
 import cn.a10miaomiao.bilidown.service.BiliDownService
 import cn.a10miaomiao.bilidown.shizuku.localShizukuPermission
-import cn.a10miaomiao.bilidown.state.TaskStatus
 import cn.a10miaomiao.bilidown.ui.BiliDownScreen
 import cn.a10miaomiao.bilidown.ui.components.DownloadListItem
 import cn.a10miaomiao.bilidown.ui.components.PermissionDialog
@@ -65,10 +75,8 @@ import cn.a10miaomiao.bilidown.ui.components.SwipeToRefresh
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import rikka.shizuku.ShizukuProvider
-
 
 data class DownloadListPageState(
     val list: List<DownloadInfo>,
@@ -92,6 +100,7 @@ sealed class DownloadListPageAction {
 
     class BatchExport(
         val groups: List<DownloadInfo>,
+        val includeOwnerPrefix: Boolean,
     ) : DownloadListPageAction()
 }
 
@@ -125,7 +134,7 @@ fun DownloadListPagePresenter(
         enabledShizuku: Boolean,
     ) {
         try {
-            MiaoLog.debug { "getList(packageName:$packageName, enabledShizuku: $enabledShizuku)" }
+            MiaoLog.debug { "getList(packageName:$packageName, enabledShizuku:$enabledShizuku)" }
             val biliDownFile = BiliDownFile(context, packageName, enabledShizuku)
             canRead = biliDownFile.canRead()
             if (!canRead) {
@@ -142,6 +151,7 @@ fun DownloadListPagePresenter(
                 var cid = 0L
                 var epid = 0L
                 var type = DownloadType.VIDEO
+
                 val page = biliEntry.page_data
                 if (page != null) {
                     id = biliEntry.avid!!
@@ -150,6 +160,7 @@ fun DownloadListPagePresenter(
                     type = DownloadType.VIDEO
                     itemTitle = biliEntry.title
                 }
+
                 val ep = biliEntry.ep
                 val source = biliEntry.source
                 if (ep != null && source != null) {
@@ -164,6 +175,7 @@ fun DownloadListPagePresenter(
                         ep.index
                     }
                 }
+
                 val item = DownloadItemInfo(
                     dir_path = it.entryDirPath,
                     media_type = biliEntry.media_type,
@@ -179,11 +191,9 @@ fun DownloadListPagePresenter(
                     epid = epid,
                     index_title = indexTitle,
                 )
+
                 val last = newList.lastOrNull()
-                if (last != null
-                    && last.type == item.type
-                    && last.id == item.id
-                ) {
+                if (last != null && last.type == item.type && last.id == item.id) {
                     if (last.is_completed && !item.is_completed) {
                         last.is_completed = false
                     }
@@ -212,13 +222,13 @@ fun DownloadListPagePresenter(
         } catch (e: TimeoutCancellationException) {
             e.printStackTrace()
             failMessage = if (enabledShizuku) {
-                "连接Shizuku服务超时，建议您尝试停止并重新激活Shizuku！"
+                "Shizuku connection timed out"
             } else {
-                "读取缓存列表超时！"
+                "Reading cache list timed out"
             }
         } catch (e: Exception) {
             e.printStackTrace()
-            failMessage = "读取列表异常：" + (e.message ?: e.toString())
+            failMessage = "Failed to read list: ${e.message ?: e}"
         } finally {
             loading = false
         }
@@ -243,9 +253,14 @@ fun DownloadListPagePresenter(
             is DownloadListPageAction.BatchExport -> {
                 val biliDownService = BiliDownService.getService(context)
                 val usedPaths = mutableSetOf<String>()
-                val resolvedNames = ListPageBatchExportFileNameResolver.resolve(it.groups)
+                val resolvedNames = ListPageBatchExportFileNameResolver.resolve(
+                    it.groups,
+                    includeOwnerPrefix = it.includeOwnerPrefix,
+                )
                 biliDownService.addTasks(
-                    it.groups.flatMap { group -> group.items }.map { item ->
+                    it.groups.flatMap { group ->
+                        group.items.map { item -> group to item }
+                    }.map { (group, item) ->
                         val fileName = resolvedNames[item.dir_path]
                             ?: item.title.replace(" ", "") + ".mp4"
                         val outFile = BiliDownOutFile(fileName)
@@ -256,6 +271,7 @@ fun DownloadListPagePresenter(
                             entryDirPath = item.dir_path,
                             outFilePath = outFile.path,
                             title = outFile.name,
+                            ownerName = group.ownerName,
                             cover = item.cover,
                         )
                     }
@@ -270,13 +286,14 @@ fun DownloadListPagePresenter(
             }
         }
     }
+
     return DownloadListPageState(
-        list,
-        path,
-        canRead,
-        loading,
-        refreshing,
-        failMessage,
+        list = list,
+        path = path,
+        canRead = canRead,
+        loading = loading,
+        refreshing = refreshing,
+        failMessage = failMessage,
     )
 }
 
@@ -296,29 +313,27 @@ fun DownloadListPage(
         DownloadListPagePresenter(context, navController, it)
     }
 
-    // 搜索状态
     var searchQuery by remember { mutableStateOf("") }
     var isSearchVisible by remember { mutableStateOf(false) }
     val keyboardController = LocalSoftwareKeyboardController.current
 
-    // 多选模式状态
     var isSelectionMode by remember { mutableStateOf(false) }
+    var showBatchExportMenu by remember { mutableStateOf(false) }
     val selectedItems = remember { mutableStateMapOf<String, DownloadInfo>() }
 
-    // 返回键退出多选模式
     BackHandler(enabled = isSelectionMode) {
         isSelectionMode = false
         selectedItems.clear()
+        showBatchExportMenu = false
     }
 
-    // 根据搜索关键字过滤列表
     val filteredList = remember(state.list, searchQuery) {
         if (searchQuery.isBlank()) {
             state.list
         } else {
             state.list.filter { info ->
-                info.title.contains(searchQuery, ignoreCase = true)
-                    || info.ownerName.contains(searchQuery, ignoreCase = true)
+                info.title.contains(searchQuery, ignoreCase = true) ||
+                    info.ownerName.contains(searchQuery, ignoreCase = true)
             }
         }
     }
@@ -330,14 +345,14 @@ fun DownloadListPage(
         shizukuPermissionState.isRunning,
         shizukuPermissionState.isEnabled,
     ) {
-        if (state.list.isEmpty()
-            && permissionState.isGranted
-            && permissionState.isExternalStorage
+        if (state.list.isEmpty() &&
+            permissionState.isGranted &&
+            permissionState.isExternalStorage
         ) {
             channel.send(
                 DownloadListPageAction.GetList(
                     packageName = packageName,
-                    shizukuPermissionState.isEnabled,
+                    enabledShizuku = shizukuPermissionState.isEnabled,
                 )
             )
         }
@@ -349,7 +364,7 @@ fun DownloadListPage(
                 channel.trySend(
                     DownloadListPageAction.GetList(
                         packageName = packageName,
-                        shizukuPermissionState.isEnabled,
+                        enabledShizuku = shizukuPermissionState.isEnabled,
                     )
                 )
             }
@@ -367,14 +382,12 @@ fun DownloadListPage(
             val packageManager = context.packageManager
             val intent = packageManager.getLaunchIntentForPackage(ShizukuProvider.MANAGER_APPLICATION_ID)
             if (intent == null) {
-                Toast.makeText(context, "未找到Shizuku", Toast.LENGTH_LONG)
-                    .show()
+                Toast.makeText(context, "Shizuku not found", Toast.LENGTH_LONG).show()
             } else {
                 context.startActivity(intent)
             }
         } catch (e: Exception) {
-            Toast.makeText(context, "Shizuku启动失败", Toast.LENGTH_LONG)
-                .show()
+            Toast.makeText(context, "Failed to launch Shizuku", Toast.LENGTH_LONG).show()
             e.printStackTrace()
         }
     }
@@ -386,7 +399,6 @@ fun DownloadListPage(
     )
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // 搜索栏
         if (isSearchVisible) {
             OutlinedTextField(
                 value = searchQuery,
@@ -394,17 +406,19 @@ fun DownloadListPage(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 10.dp, vertical = 4.dp),
-                placeholder = { Text("搜索视频标题...") },
+                placeholder = { Text("Search title / owner...") },
                 leadingIcon = {
-                    Icon(Icons.Filled.Search, contentDescription = "搜索")
+                    Icon(Icons.Filled.Search, contentDescription = "Search")
                 },
                 trailingIcon = {
-                    IconButton(onClick = {
-                        searchQuery = ""
-                        isSearchVisible = false
-                        keyboardController?.hide()
-                    }) {
-                        Icon(Icons.Filled.Close, contentDescription = "关闭搜索")
+                    IconButton(
+                        onClick = {
+                            searchQuery = ""
+                            isSearchVisible = false
+                            keyboardController?.hide()
+                        }
+                    ) {
+                        Icon(Icons.Filled.Close, contentDescription = "Close Search")
                     }
                 },
                 singleLine = true,
@@ -427,97 +441,103 @@ fun DownloadListPage(
                     )
                 },
             ) {
-               if (state.list.isEmpty()) {
+                if (state.list.isEmpty()) {
                     Column(
                         modifier = Modifier.fillMaxSize(),
                         verticalArrangement = Arrangement.Center,
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        if (state.loading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(40.dp),
-                                strokeWidth = 4.dp,
-                            )
-                            Spacer(modifier = Modifier.height(20.dp))
-                            Text(
-                                "正在读取列表",
-                                color = MaterialTheme.colorScheme.outline,
-                            )
-                        } else if (!permissionState.isGranted || !permissionState.isExternalStorage) {
-                            Column(
-                                modifier = Modifier.fillMaxSize(),
-                                verticalArrangement = Arrangement.Center,
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                            ) {
+                        when {
+                            state.loading -> {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(40.dp),
+                                    strokeWidth = 4.dp,
+                                )
+                                Spacer(modifier = Modifier.height(20.dp))
+                                Text(
+                                    text = "Loading list",
+                                    color = MaterialTheme.colorScheme.outline,
+                                )
+                            }
+
+                            !permissionState.isGranted || !permissionState.isExternalStorage -> {
                                 if (permissionState.isGranted) {
-                                    Text(text = "请授予所有文件的存储权限")
+                                    Text(text = "Please grant all file access")
                                     Spacer(modifier = Modifier.height(20.dp))
                                     Button(
                                         onClick = {
                                             storagePermission.requestPermissions(::resultCallBack)
                                         }
                                     ) {
-                                        Text(text = "授予所有文件的权限")
+                                        Text(text = "Grant All Files")
                                     }
                                 } else {
-                                    Text(text = "请授予存储权限")
+                                    Text(text = "Please grant storage permission")
                                     Spacer(modifier = Modifier.height(20.dp))
                                     Button(
                                         onClick = {
                                             storagePermission.requestPermissions(::resultCallBack)
                                         }
                                     ) {
-                                        Text(text = "授予权限")
+                                        Text(text = "Grant Permission")
                                     }
                                 }
                             }
-                        } else if (!state.canRead) {
-                            Text(text = "请授予文件夹权限")
-                            Spacer(modifier = Modifier.height(20.dp))
-                            Button(
-                                onClick = {
-                                    val biliDownFile = BiliDownFile(context, packageName, shizukuPermissionState.isEnabled)
-                                    biliDownFile.startFor(2)
-                                }
-                            ) {
-                                Text(text = "授予权限")
-                            }
-                            TextButton(
-                                onClick = {
-                                    navController.navigate(BiliDownScreen.More.route) {
-                                        popUpTo(navController.graph.findStartDestination().id) {
-                                            saveState = true
-                                        }
-                                        launchSingleTop = true
-                                        restoreState = true
+
+                            !state.canRead -> {
+                                Text(text = "Please grant cache folder access")
+                                Spacer(modifier = Modifier.height(20.dp))
+                                Button(
+                                    onClick = {
+                                        val biliDownFile = BiliDownFile(
+                                            context,
+                                            packageName,
+                                            shizukuPermissionState.isEnabled,
+                                        )
+                                        biliDownFile.startFor(2)
                                     }
-                                }
-                            ) {
-                                Text(text = "或使用Shizuku")
-                            }
-                        } else if (state.failMessage.isNotBlank()) {
-                            Text(
-                                text = state.failMessage,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.padding(20.dp)
-                            )
-                            if ("Shizuku" in state.failMessage) {
-                                TextButton(
-                                    onClick = ::openShizuku,
                                 ) {
-                                    Text(text = "跳转Shizuku")
+                                    Text(text = "Grant Access")
+                                }
+                                TextButton(
+                                    onClick = {
+                                        navController.navigate(BiliDownScreen.More.route) {
+                                            popUpTo(navController.graph.findStartDestination().id) {
+                                                saveState = true
+                                            }
+                                            launchSingleTop = true
+                                            restoreState = true
+                                        }
+                                    }
+                                ) {
+                                    Text(text = "Or use Shizuku")
                                 }
                             }
-                        } else {
-                            Image(
-                                painter = painterResource(id = R.drawable.ic_movie_pay_area_limit),
-                                contentDescription = "空空如也",
-                                modifier = Modifier.size(200.dp, 200.dp)
-                            )
-                            Text(
-                                modifier = Modifier.padding(vertical = 8.dp),
-                                text = "空空如也",
-                            )
+
+                            state.failMessage.isNotBlank() -> {
+                                Text(
+                                    text = state.failMessage,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.padding(20.dp)
+                                )
+                                if ("Shizuku" in state.failMessage) {
+                                    TextButton(onClick = ::openShizuku) {
+                                        Text(text = "Open Shizuku")
+                                    }
+                                }
+                            }
+
+                            else -> {
+                                Image(
+                                    painter = painterResource(id = R.drawable.ic_movie_pay_area_limit),
+                                    contentDescription = "Empty",
+                                    modifier = Modifier.size(200.dp, 200.dp)
+                                )
+                                Text(
+                                    modifier = Modifier.padding(vertical = 8.dp),
+                                    text = "Empty",
+                                )
+                            }
                         }
                     }
                 } else {
@@ -527,7 +547,6 @@ fun DownloadListPage(
                             bottom = if (isSelectionMode) 160.dp else 80.dp
                         ),
                     ) {
-                        // 搜索按钮 + 视频总数
                         if (!isSearchVisible && !isSelectionMode) {
                             item {
                                 Row(
@@ -538,14 +557,14 @@ fun DownloadListPage(
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     Text(
-                                        text = "共 ${state.list.size} 个视频",
+                                        text = "Total ${state.list.size}",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.outline,
                                     )
                                     IconButton(onClick = { isSearchVisible = true }) {
                                         Icon(
                                             Icons.Filled.Search,
-                                            contentDescription = "搜索",
+                                            contentDescription = "Search",
                                             tint = MaterialTheme.colorScheme.primary,
                                         )
                                     }
@@ -562,7 +581,7 @@ fun DownloadListPage(
                                     contentAlignment = Alignment.Center,
                                 ) {
                                     Text(
-                                        text = "没有找到匹配的视频",
+                                        text = "No matching videos",
                                         color = MaterialTheme.colorScheme.outline,
                                     )
                                 }
@@ -575,9 +594,10 @@ fun DownloadListPage(
                                 isSelectionMode = isSelectionMode,
                                 isSelected = selectedItems.containsKey(downloadInfo.dir_path),
                                 onClick = {
-                                    val dirPath = Uri.encode(downloadInfo.dir_path)
+                                    val encodedDirPath = Uri.encode(downloadInfo.dir_path)
                                     navController.navigate(
-                                        BiliDownScreen.Detail.route + "?packageName=${packageName}&dirPath=${dirPath}"
+                                        BiliDownScreen.Detail.route +
+                                            "?packageName=$packageName&dirPath=$encodedDirPath"
                                     )
                                 },
                                 onLongClick = {
@@ -602,7 +622,6 @@ fun DownloadListPage(
                 }
             }
 
-            // 多选模式底部操作栏
             if (isSelectionMode) {
                 Surface(
                     modifier = Modifier
@@ -622,7 +641,6 @@ fun DownloadListPage(
                         val selectedCount = selectedItems.size
                         val isAllSelected = totalCount > 0 && selectedCount >= totalCount
 
-                        // 全选/取消全选按钮
                         TextButton(
                             onClick = {
                                 if (isAllSelected) {
@@ -634,59 +652,83 @@ fun DownloadListPage(
                                 }
                             }
                         ) {
-                            Text(
-                                text = if (isAllSelected) "取消全选" else "全选"
-                            )
+                            Text(if (isAllSelected) "Deselect All" else "Select All")
                         }
 
                         Spacer(modifier = Modifier.width(8.dp))
 
                         Text(
-                            text = "已选 $selectedCount 项",
+                            text = "Selected $selectedCount",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
 
                         Spacer(modifier = Modifier.weight(1f))
 
-                        // 取消按钮
                         OutlinedButton(
                             onClick = {
                                 isSelectionMode = false
                                 selectedItems.clear()
+                                showBatchExportMenu = false
                             }
                         ) {
-                            Text("取消")
+                            Text("Cancel")
                         }
 
                         Spacer(modifier = Modifier.width(8.dp))
 
-                        // 一键导出按钮
-                        Button(
-                            onClick = {
-                                // 收集所有选中视频组的子项
-                                channel.trySend(
-                                    DownloadListPageAction.BatchExport(
-                                        selectedItems.values.toList()
-                                    )
+                        Box {
+                            Button(
+                                onClick = {
+                                    showBatchExportMenu = true
+                                },
+                                enabled = selectedItems.isNotEmpty(),
+                            ) {
+                                Icon(
+                                    Icons.Filled.CheckCircle,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
                                 )
-                                isSelectionMode = false
-                                selectedItems.clear()
-                            },
-                            enabled = selectedItems.isNotEmpty(),
-                        ) {
-                            Icon(
-                                Icons.Filled.CheckCircle,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("一键导出")
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Export")
+                            }
+                            DropdownMenu(
+                                expanded = showBatchExportMenu,
+                                onDismissRequest = { showBatchExportMenu = false },
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Default") },
+                                    onClick = {
+                                        channel.trySend(
+                                            DownloadListPageAction.BatchExport(
+                                                groups = selectedItems.values.toList(),
+                                                includeOwnerPrefix = false,
+                                            )
+                                        )
+                                        showBatchExportMenu = false
+                                        isSelectionMode = false
+                                        selectedItems.clear()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("With Owner Prefix") },
+                                    onClick = {
+                                        channel.trySend(
+                                            DownloadListPageAction.BatchExport(
+                                                groups = selectedItems.values.toList(),
+                                                includeOwnerPrefix = true,
+                                            )
+                                        )
+                                        showBatchExportMenu = false
+                                        isSelectionMode = false
+                                        selectedItems.clear()
+                                    }
+                                )
+                            }
                         }
                     }
                 }
             }
         }
     }
-
 }

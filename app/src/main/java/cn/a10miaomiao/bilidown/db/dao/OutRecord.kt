@@ -10,6 +10,7 @@ data class OutRecord (
     @ColumnInfo(name = "input_path") val entryDirPath: String,
     @ColumnInfo(name = "out_file_path") val outFilePath: String,
     @ColumnInfo val title: String,
+    @ColumnInfo(name = "owner_name") val ownerName: String = "",
     @ColumnInfo val cover: String,
     @ColumnInfo val status: Int,
     @ColumnInfo val type: Int,

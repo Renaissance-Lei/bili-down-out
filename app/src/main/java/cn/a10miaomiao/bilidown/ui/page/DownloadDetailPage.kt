@@ -3,13 +3,36 @@ package cn.a10miaomiao.bilidown.ui.page
 import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -20,6 +43,7 @@ import androidx.navigation.NavHostController
 import cn.a10miaomiao.bilidown.BiliDownApp
 import cn.a10miaomiao.bilidown.common.BiliDownFile
 import cn.a10miaomiao.bilidown.common.BiliDownOutFile
+import cn.a10miaomiao.bilidown.common.ListPageBatchExportFileNameResolver
 import cn.a10miaomiao.bilidown.common.file.MiaoDocumentFile
 import cn.a10miaomiao.bilidown.common.file.MiaoJavaFile
 import cn.a10miaomiao.bilidown.common.molecule.collectAction
@@ -29,7 +53,6 @@ import cn.a10miaomiao.bilidown.entity.DownloadInfo
 import cn.a10miaomiao.bilidown.entity.DownloadItemInfo
 import cn.a10miaomiao.bilidown.entity.DownloadType
 import cn.a10miaomiao.bilidown.service.BiliDownService
-import cn.a10miaomiao.bilidown.shizuku.localShizukuPermission
 import cn.a10miaomiao.bilidown.state.TaskStatus
 import cn.a10miaomiao.bilidown.ui.BiliDownScreen
 import cn.a10miaomiao.bilidown.ui.components.DownloadDetailItem
@@ -37,7 +60,6 @@ import cn.a10miaomiao.bilidown.ui.components.DownloadListItem
 import cn.a10miaomiao.bilidown.ui.components.FileNameInputDialog
 import kotlinx.coroutines.flow.Flow
 import java.io.File
-
 
 data class DownloadDetailPageState(
     val detailInfo: DownloadInfo?,
@@ -48,18 +70,20 @@ sealed class DownloadDetailPageAction {
     class Export(
         val entryDirPath: String,
         val outFile: BiliDownOutFile,
-    ): DownloadDetailPageAction()
+    ) : DownloadDetailPageAction()
 
     class AddTask(
         val entryDirPath: String,
         val outFilePath: String,
         val title: String,
+        val ownerName: String,
         val cover: String,
-    ): DownloadDetailPageAction()
+    ) : DownloadDetailPageAction()
 
     class BatchExport(
-        val items: List<DownloadItemInfo>,
-    ): DownloadDetailPageAction()
+        val groups: List<DownloadInfo>,
+        val includeOwnerPrefix: Boolean,
+    ) : DownloadDetailPageAction()
 }
 
 @Composable
@@ -73,25 +97,19 @@ fun DownloadDetailPagePresenter(
     var detailInfo by remember {
         mutableStateOf<DownloadInfo?>(null)
     }
-    var path by remember {
-        mutableStateOf("")
-    }
     val outRecordMap = remember {
         mutableStateMapOf<String, OutRecord>()
     }
+
     LaunchedEffect(packageName, dirPath) {
         val biliDownService = BiliDownService.getService(context)
         val appState = (context.applicationContext as BiliDownApp).state
         val shizukuState = appState.shizukuState.value
         val biliDownFile = BiliDownFile(context, packageName, shizukuState.isEnabled)
-//        val list = mutableListOf<DownloadInfo>()
         val dirFile = if (dirPath.startsWith("content://")) {
             MiaoDocumentFile(
                 context,
-                DocumentFile.fromTreeUri(
-                    context,
-                    Uri.parse(dirPath)
-                )!!
+                DocumentFile.fromTreeUri(context, Uri.parse(dirPath))!!
             )
         } else {
             MiaoJavaFile(File(dirPath))
@@ -99,14 +117,16 @@ fun DownloadDetailPagePresenter(
         val list = biliDownFile.readDownloadDirectory(dirFile)
         val items = mutableListOf<DownloadItemInfo>()
         var isCompleted = true
+
         list.forEach {
             val biliEntry = it.entry
             var indexTitle = ""
             var itemTitle = ""
-            var id = it.entry.avid ?: 0L
+            var id = biliEntry.avid ?: 0L
             var cid = 0L
             var epid = 0L
             var type = DownloadType.VIDEO
+
             val page = biliEntry.page_data
             if (page != null) {
                 id = biliEntry.avid!!
@@ -115,6 +135,7 @@ fun DownloadDetailPagePresenter(
                 type = DownloadType.VIDEO
                 itemTitle = biliEntry.title
             }
+
             val ep = biliEntry.ep
             val source = biliEntry.source
             if (ep != null && source != null) {
@@ -125,6 +146,7 @@ fun DownloadDetailPagePresenter(
                 type = DownloadType.BANGUMI
                 itemTitle = ep.index + ep.index_title
             }
+
             val item = DownloadItemInfo(
                 dir_path = it.entryDirPath,
                 media_type = biliEntry.media_type,
@@ -145,22 +167,22 @@ fun DownloadDetailPagePresenter(
                 isCompleted = false
             }
         }
+
         if (items.isNotEmpty()) {
-            val paths = items.map {
-                it.dir_path
-            }.toTypedArray()
+            val paths = items.map { it.dir_path }.toTypedArray()
             val records = biliDownService.getRecordList(paths)
             outRecordMap.clear()
             records.forEach {
                 outRecordMap[it.entryDirPath] = it
             }
         }
-        if (list.isEmpty()) {
-            detailInfo = null
+
+        detailInfo = if (list.isEmpty()) {
+            null
         } else {
             val biliEntry = list[0].entry
             val item = items[0]
-            detailInfo = DownloadInfo(
+            DownloadInfo(
                 dir_path = list[0].pageDirPath,
                 media_type = biliEntry.media_type,
                 has_dash_audio = biliEntry.has_dash_audio,
@@ -177,6 +199,7 @@ fun DownloadDetailPagePresenter(
             )
         }
     }
+
     action.collectAction {
         when (it) {
             is DownloadDetailPageAction.Export -> {
@@ -202,16 +225,24 @@ fun DownloadDetailPagePresenter(
                     it.entryDirPath,
                     it.outFilePath,
                     it.title,
-                    it.cover
+                    it.ownerName,
+                    it.cover,
                 )
             }
 
             is DownloadDetailPageAction.BatchExport -> {
                 val biliDownService = BiliDownService.getService(context)
                 val usedPaths = mutableSetOf<String>()
+                val resolvedNames = ListPageBatchExportFileNameResolver.resolve(
+                    it.groups,
+                    includeOwnerPrefix = it.includeOwnerPrefix,
+                )
                 biliDownService.addTasks(
-                    it.items.map { item ->
-                        val fileName = item.title.replace(" ", "") + ".mp4"
+                    it.groups.flatMap { group ->
+                        group.items.map { item -> group to item }
+                    }.map { (group, item) ->
+                        val fileName = resolvedNames[item.dir_path]
+                            ?: item.title.replace(" ", "") + ".mp4"
                         val outFile = BiliDownOutFile(fileName)
                         outFile.autoRename(usedPaths)
                         usedPaths.add(outFile.path)
@@ -220,6 +251,7 @@ fun DownloadDetailPagePresenter(
                             entryDirPath = item.dir_path,
                             outFilePath = outFile.path,
                             title = outFile.name,
+                            ownerName = group.ownerName,
                             cover = item.cover,
                         )
                     }
@@ -234,9 +266,10 @@ fun DownloadDetailPagePresenter(
             }
         }
     }
+
     return DownloadDetailPageState(
-        detailInfo,
-        outRecordMap,
+        detailInfo = detailInfo,
+        outRecordMap = outRecordMap,
     )
 }
 
@@ -252,47 +285,65 @@ fun DownloadDetailPage(
     val (state, channel) = rememberPresenter(listOf(packageName, dirPath)) {
         DownloadDetailPagePresenter(context, packageName, dirPath, navController, it)
     }
+
     var selectedItem by remember {
         mutableStateOf<DownloadItemInfo?>(null)
     }
-
-    // 多选模式状态
+    var showBatchExportMenu by remember {
+        mutableStateOf(false)
+    }
     var isSelectionMode by remember { mutableStateOf(false) }
     val selectedItems = remember { mutableStateMapOf<String, DownloadItemInfo>() }
 
-    // 返回键退出多选模式
     BackHandler(enabled = isSelectionMode) {
         isSelectionMode = false
         selectedItems.clear()
+        showBatchExportMenu = false
+    }
+
+    fun buildSelectedGroup(): List<DownloadInfo> {
+        val detailInfo = state.detailInfo ?: return emptyList()
+        return listOf(
+            detailInfo.copy(
+                items = selectedItems.values.toMutableList()
+            )
+        )
     }
 
     FileNameInputDialog(
         showInputDialog = selectedItem != null,
         fileName = selectedItem?.title ?: "",
+        confirmText = if (taskStatus is TaskStatus.InIdle) {
+            "Export"
+        } else {
+            "Add To Queue"
+        },
         onDismiss = {
             selectedItem = null
         },
-        confirmText = if (taskStatus is TaskStatus.InIdle) {
-            "确定导出"
-        } else { "添加到队列" },
         onConfirm = { outFile ->
             selectedItem?.let { item ->
                 if (taskStatus is TaskStatus.InIdle) {
-                    channel.trySend(DownloadDetailPageAction.Export(
-                        entryDirPath = item.dir_path,
-                        outFile = outFile,
-                    ))
+                    channel.trySend(
+                        DownloadDetailPageAction.Export(
+                            entryDirPath = item.dir_path,
+                            outFile = outFile,
+                        )
+                    )
                 } else {
-                    channel.trySend(DownloadDetailPageAction.AddTask(
-                        entryDirPath = item.dir_path,
-                        outFilePath = outFile.path,
-                        title = outFile.name,
-                        cover = item.cover
-                    ))
+                    channel.trySend(
+                        DownloadDetailPageAction.AddTask(
+                            entryDirPath = item.dir_path,
+                            outFilePath = outFile.path,
+                            title = outFile.name,
+                            ownerName = state.detailInfo?.ownerName.orEmpty(),
+                            cover = item.cover,
+                        )
+                    )
                 }
             }
             selectedItem = null
-        }
+        },
     )
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -307,46 +358,42 @@ fun DownloadDetailPage(
                 item {
                     DownloadListItem(
                         item = detailInfo,
-                        onClick = { },
+                        onClick = {},
                     )
                 }
-                items(detailInfo.items, { it.dir_path }) {
+                items(detailInfo.items, { it.dir_path }) { item ->
                     DownloadDetailItem(
-                        item = it,
-                        isOut = state.outRecordMap.containsKey(it.dir_path),
+                        item = item,
+                        isOut = state.outRecordMap.containsKey(item.dir_path),
                         isSelectionMode = isSelectionMode,
-                        isSelected = selectedItems.containsKey(it.dir_path),
-                        onClick = {
-                        },
+                        isSelected = selectedItems.containsKey(item.dir_path),
+                        onClick = {},
                         onLongClick = {
                             if (!isSelectionMode) {
                                 isSelectionMode = true
-                                selectedItems[it.dir_path] = it
+                                selectedItems[item.dir_path] = item
                             }
                         },
                         onSelectToggle = {
-                            if (selectedItems.containsKey(it.dir_path)) {
-                                selectedItems.remove(it.dir_path)
+                            if (selectedItems.containsKey(item.dir_path)) {
+                                selectedItems.remove(item.dir_path)
                                 if (selectedItems.isEmpty()) {
                                     isSelectionMode = false
                                 }
                             } else {
-                                selectedItems[it.dir_path] = it
+                                selectedItems[item.dir_path] = item
                             }
                         },
-                        onStartClick = {
-                        },
-                        onPauseClick = {
-                        },
+                        onStartClick = {},
+                        onPauseClick = {},
                         onExportClick = {
-                            selectedItem = it
+                            selectedItem = item
                         },
                     )
                 }
             }
         }
 
-        // 多选模式底部操作栏
         if (isSelectionMode) {
             Surface(
                 modifier = Modifier
@@ -366,7 +413,6 @@ fun DownloadDetailPage(
                     val selectedCount = selectedItems.size
                     val isAllSelected = totalCount > 0 && selectedCount == totalCount
 
-                    // 全选/取消全选按钮
                     TextButton(
                         onClick = {
                             if (isAllSelected) {
@@ -378,52 +424,85 @@ fun DownloadDetailPage(
                             }
                         }
                     ) {
-                        Text(
-                            text = if (isAllSelected) "取消全选" else "全选"
-                        )
+                        Text(if (isAllSelected) "Deselect All" else "Select All")
                     }
 
                     Spacer(modifier = Modifier.width(8.dp))
 
                     Text(
-                        text = "已选 $selectedCount 项",
+                        text = "Selected $selectedCount",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
 
                     Spacer(modifier = Modifier.weight(1f))
 
-                    // 取消按钮
                     OutlinedButton(
                         onClick = {
                             isSelectionMode = false
                             selectedItems.clear()
+                            showBatchExportMenu = false
                         }
                     ) {
-                        Text("取消")
+                        Text("Cancel")
                     }
 
                     Spacer(modifier = Modifier.width(8.dp))
 
-                    // 一键导出按钮
-                    Button(
-                        onClick = {
-                            val itemsToExport = selectedItems.values.toList()
-                            channel.trySend(
-                                DownloadDetailPageAction.BatchExport(itemsToExport)
+                    Box {
+                        Button(
+                            onClick = {
+                                showBatchExportMenu = true
+                            },
+                            enabled = selectedItems.isNotEmpty(),
+                        ) {
+                            Icon(
+                                Icons.Filled.CheckCircle,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
                             )
-                            isSelectionMode = false
-                            selectedItems.clear()
-                        },
-                        enabled = selectedItems.isNotEmpty(),
-                    ) {
-                        Icon(
-                            Icons.Filled.CheckCircle,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("一键导出")
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Export")
+                        }
+                        DropdownMenu(
+                            expanded = showBatchExportMenu,
+                            onDismissRequest = { showBatchExportMenu = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Default") },
+                                onClick = {
+                                    val groups = buildSelectedGroup()
+                                    if (groups.isNotEmpty()) {
+                                        channel.trySend(
+                                            DownloadDetailPageAction.BatchExport(
+                                                groups = groups,
+                                                includeOwnerPrefix = false,
+                                            )
+                                        )
+                                    }
+                                    showBatchExportMenu = false
+                                    isSelectionMode = false
+                                    selectedItems.clear()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("With Owner Prefix") },
+                                onClick = {
+                                    val groups = buildSelectedGroup()
+                                    if (groups.isNotEmpty()) {
+                                        channel.trySend(
+                                            DownloadDetailPageAction.BatchExport(
+                                                groups = groups,
+                                                includeOwnerPrefix = true,
+                                            )
+                                        )
+                                    }
+                                    showBatchExportMenu = false
+                                    isSelectionMode = false
+                                    selectedItems.clear()
+                                }
+                            )
+                        }
                     }
                 }
             }

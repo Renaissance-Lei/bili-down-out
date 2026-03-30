@@ -126,9 +126,46 @@ class ListPageBatchExportFileNameResolverTest {
         assertEquals("video(2).mp4", names["item-3"])
     }
 
+    @Test
+    fun `resolver can prefix owner name for batch export`() {
+        val groups = listOf(
+            createGroup(
+                dirPath = "group-1",
+                title = "clip",
+                ownerName = "owner-a",
+                items = listOf(
+                    createItem(
+                        dirPath = "item-1",
+                        title = "clip",
+                    )
+                )
+            ),
+            createGroup(
+                dirPath = "group-2",
+                title = "clip",
+                ownerName = "owner-a",
+                items = listOf(
+                    createItem(
+                        dirPath = "item-2",
+                        title = "clip",
+                    )
+                )
+            ),
+        )
+
+        val names = ListPageBatchExportFileNameResolver.resolve(
+            groups,
+            includeOwnerPrefix = true,
+        )
+
+        assertEquals("\u3010owner-a\u3011clip.mp4", names["item-1"])
+        assertEquals("\u3010owner-a\u3011clip(1).mp4", names["item-2"])
+    }
+
     private fun createGroup(
         dirPath: String,
         title: String,
+        ownerName: String = "",
         items: List<DownloadItemInfo>,
     ) = DownloadInfo(
         dir_path = dirPath,
@@ -143,6 +180,7 @@ class ListPageBatchExportFileNameResolverTest {
         cid = 1L,
         type = DownloadType.VIDEO,
         items = items.toMutableList(),
+        ownerName = ownerName,
     )
 
     private fun createItem(
