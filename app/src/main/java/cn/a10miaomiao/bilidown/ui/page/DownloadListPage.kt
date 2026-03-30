@@ -71,6 +71,8 @@ import cn.a10miaomiao.bilidown.shizuku.localShizukuPermission
 import cn.a10miaomiao.bilidown.ui.BiliDownScreen
 import cn.a10miaomiao.bilidown.ui.components.DownloadListItem
 import cn.a10miaomiao.bilidown.ui.components.PermissionDialog
+import cn.a10miaomiao.bilidown.ui.components.SearchScope
+import cn.a10miaomiao.bilidown.ui.components.SearchScopeSelector
 import cn.a10miaomiao.bilidown.ui.components.SwipeToRefresh
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
@@ -222,13 +224,13 @@ fun DownloadListPagePresenter(
         } catch (e: TimeoutCancellationException) {
             e.printStackTrace()
             failMessage = if (enabledShizuku) {
-                "Shizuku connection timed out"
+                "Shizuku 连接超时"
             } else {
-                "Reading cache list timed out"
+                "读取缓存列表超时"
             }
         } catch (e: Exception) {
             e.printStackTrace()
-            failMessage = "Failed to read list: ${e.message ?: e}"
+            failMessage = "读取列表失败：${e.message ?: e}"
         } finally {
             loading = false
         }
@@ -315,6 +317,7 @@ fun DownloadListPage(
 
     var searchQuery by remember { mutableStateOf("") }
     var isSearchVisible by remember { mutableStateOf(false) }
+    var searchScope by remember { mutableStateOf(SearchScope()) }
     val keyboardController = LocalSoftwareKeyboardController.current
 
     var isSelectionMode by remember { mutableStateOf(false) }
@@ -327,14 +330,9 @@ fun DownloadListPage(
         showBatchExportMenu = false
     }
 
-    val filteredList = remember(state.list, searchQuery) {
-        if (searchQuery.isBlank()) {
-            state.list
-        } else {
-            state.list.filter { info ->
-                info.title.contains(searchQuery, ignoreCase = true) ||
-                    info.ownerName.contains(searchQuery, ignoreCase = true)
-            }
+    val filteredList = remember(state.list, searchQuery, searchScope) {
+        state.list.filter { info ->
+            searchScope.matches(searchQuery, info.title, info.ownerName)
         }
     }
 
@@ -382,12 +380,12 @@ fun DownloadListPage(
             val packageManager = context.packageManager
             val intent = packageManager.getLaunchIntentForPackage(ShizukuProvider.MANAGER_APPLICATION_ID)
             if (intent == null) {
-                Toast.makeText(context, "Shizuku not found", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, "未找到 Shizuku", Toast.LENGTH_LONG).show()
             } else {
                 context.startActivity(intent)
             }
         } catch (e: Exception) {
-            Toast.makeText(context, "Failed to launch Shizuku", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, "打开 Shizuku 失败", Toast.LENGTH_LONG).show()
             e.printStackTrace()
         }
     }
@@ -400,33 +398,40 @@ fun DownloadListPage(
 
     Column(modifier = Modifier.fillMaxSize()) {
         if (isSearchVisible) {
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 10.dp, vertical = 4.dp),
-                placeholder = { Text("Search title / owner...") },
-                leadingIcon = {
-                    Icon(Icons.Filled.Search, contentDescription = "Search")
-                },
-                trailingIcon = {
-                    IconButton(
-                        onClick = {
-                            searchQuery = ""
-                            isSearchVisible = false
-                            keyboardController?.hide()
+            Column {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                    placeholder = { Text("搜索视频标题或博主") },
+                    leadingIcon = {
+                        Icon(Icons.Filled.Search, contentDescription = "搜索")
+                    },
+                    trailingIcon = {
+                        IconButton(
+                            onClick = {
+                                searchQuery = ""
+                                isSearchVisible = false
+                                keyboardController?.hide()
+                            }
+                        ) {
+                            Icon(Icons.Filled.Close, contentDescription = "关闭搜索")
                         }
-                    ) {
-                        Icon(Icons.Filled.Close, contentDescription = "Close Search")
-                    }
-                },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(
-                    onSearch = { keyboardController?.hide() }
-                ),
-            )
+                    },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(
+                        onSearch = { keyboardController?.hide() }
+                    ),
+                )
+                SearchScopeSelector(
+                    scope = searchScope,
+                    onScopeChange = { searchScope = it },
+                    modifier = Modifier.padding(bottom = 4.dp),
+                )
+            }
         }
 
         Box(modifier = Modifier.weight(1f)) {
@@ -455,37 +460,37 @@ fun DownloadListPage(
                                 )
                                 Spacer(modifier = Modifier.height(20.dp))
                                 Text(
-                                    text = "Loading list",
+                                    text = "正在读取列表",
                                     color = MaterialTheme.colorScheme.outline,
                                 )
                             }
 
                             !permissionState.isGranted || !permissionState.isExternalStorage -> {
                                 if (permissionState.isGranted) {
-                                    Text(text = "Please grant all file access")
+                                    Text(text = "请授予所有文件访问权限")
                                     Spacer(modifier = Modifier.height(20.dp))
                                     Button(
                                         onClick = {
                                             storagePermission.requestPermissions(::resultCallBack)
                                         }
                                     ) {
-                                        Text(text = "Grant All Files")
+                                        Text(text = "授权所有文件")
                                     }
                                 } else {
-                                    Text(text = "Please grant storage permission")
+                                    Text(text = "请授予存储权限")
                                     Spacer(modifier = Modifier.height(20.dp))
                                     Button(
                                         onClick = {
                                             storagePermission.requestPermissions(::resultCallBack)
                                         }
                                     ) {
-                                        Text(text = "Grant Permission")
+                                        Text(text = "去授权")
                                     }
                                 }
                             }
 
                             !state.canRead -> {
-                                Text(text = "Please grant cache folder access")
+                                Text(text = "请授予缓存目录访问权限")
                                 Spacer(modifier = Modifier.height(20.dp))
                                 Button(
                                     onClick = {
@@ -497,7 +502,7 @@ fun DownloadListPage(
                                         biliDownFile.startFor(2)
                                     }
                                 ) {
-                                    Text(text = "Grant Access")
+                                    Text(text = "授权访问")
                                 }
                                 TextButton(
                                     onClick = {
@@ -510,7 +515,7 @@ fun DownloadListPage(
                                         }
                                     }
                                 ) {
-                                    Text(text = "Or use Shizuku")
+                                    Text(text = "或使用 Shizuku")
                                 }
                             }
 
@@ -522,7 +527,7 @@ fun DownloadListPage(
                                 )
                                 if ("Shizuku" in state.failMessage) {
                                     TextButton(onClick = ::openShizuku) {
-                                        Text(text = "Open Shizuku")
+                                        Text(text = "打开 Shizuku")
                                     }
                                 }
                             }
@@ -530,12 +535,12 @@ fun DownloadListPage(
                             else -> {
                                 Image(
                                     painter = painterResource(id = R.drawable.ic_movie_pay_area_limit),
-                                    contentDescription = "Empty",
+                                    contentDescription = "空列表",
                                     modifier = Modifier.size(200.dp, 200.dp)
                                 )
                                 Text(
                                     modifier = Modifier.padding(vertical = 8.dp),
-                                    text = "Empty",
+                                    text = "暂无内容",
                                 )
                             }
                         }
@@ -557,14 +562,14 @@ fun DownloadListPage(
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     Text(
-                                        text = "Total ${state.list.size}",
+                                        text = "共 ${state.list.size} 个视频",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.outline,
                                     )
                                     IconButton(onClick = { isSearchVisible = true }) {
                                         Icon(
                                             Icons.Filled.Search,
-                                            contentDescription = "Search",
+                                            contentDescription = "搜索",
                                             tint = MaterialTheme.colorScheme.primary,
                                         )
                                     }
@@ -581,7 +586,7 @@ fun DownloadListPage(
                                     contentAlignment = Alignment.Center,
                                 ) {
                                     Text(
-                                        text = "No matching videos",
+                                        text = "没有找到匹配的视频",
                                         color = MaterialTheme.colorScheme.outline,
                                     )
                                 }
@@ -639,7 +644,8 @@ fun DownloadListPage(
                     ) {
                         val totalCount = filteredList.size
                         val selectedCount = selectedItems.size
-                        val isAllSelected = totalCount > 0 && selectedCount >= totalCount
+                        val isAllSelected = totalCount > 0 &&
+                            filteredList.all { info -> selectedItems.containsKey(info.dir_path) }
 
                         TextButton(
                             onClick = {
@@ -652,13 +658,13 @@ fun DownloadListPage(
                                 }
                             }
                         ) {
-                            Text(if (isAllSelected) "Deselect All" else "Select All")
+                            Text(if (isAllSelected) "取消全选" else "全选")
                         }
 
                         Spacer(modifier = Modifier.width(8.dp))
 
                         Text(
-                            text = "Selected $selectedCount",
+                            text = "已选 $selectedCount 项",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -672,7 +678,7 @@ fun DownloadListPage(
                                 showBatchExportMenu = false
                             }
                         ) {
-                            Text("Cancel")
+                            Text("取消")
                         }
 
                         Spacer(modifier = Modifier.width(8.dp))
@@ -690,14 +696,14 @@ fun DownloadListPage(
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Export")
+                                Text("导出")
                             }
                             DropdownMenu(
                                 expanded = showBatchExportMenu,
                                 onDismissRequest = { showBatchExportMenu = false },
                             ) {
                                 DropdownMenuItem(
-                                    text = { Text("Default") },
+                                    text = { Text("默认命名") },
                                     onClick = {
                                         channel.trySend(
                                             DownloadListPageAction.BatchExport(
@@ -711,7 +717,7 @@ fun DownloadListPage(
                                     }
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("With Owner Prefix") },
+                                    text = { Text("博主前缀命名") },
                                     onClick = {
                                         channel.trySend(
                                             DownloadListPageAction.BatchExport(

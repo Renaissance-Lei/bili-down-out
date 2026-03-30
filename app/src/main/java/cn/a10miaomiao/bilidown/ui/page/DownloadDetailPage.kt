@@ -314,9 +314,9 @@ fun DownloadDetailPage(
         showInputDialog = selectedItem != null,
         fileName = selectedItem?.title ?: "",
         confirmText = if (taskStatus is TaskStatus.InIdle) {
-            "Export"
+            "导出"
         } else {
-            "Add To Queue"
+            "加入队列"
         },
         onDismiss = {
             selectedItem = null
@@ -424,13 +424,13 @@ fun DownloadDetailPage(
                             }
                         }
                     ) {
-                        Text(if (isAllSelected) "Deselect All" else "Select All")
+                        Text(if (isAllSelected) "取消全选" else "全选")
                     }
 
                     Spacer(modifier = Modifier.width(8.dp))
 
                     Text(
-                        text = "Selected $selectedCount",
+                        text = "已选 $selectedCount 项",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -444,7 +444,7 @@ fun DownloadDetailPage(
                             showBatchExportMenu = false
                         }
                     ) {
-                        Text("Cancel")
+                        Text("取消")
                     }
 
                     Spacer(modifier = Modifier.width(8.dp))
@@ -462,14 +462,14 @@ fun DownloadDetailPage(
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Export")
+                            Text("导出")
                         }
                         DropdownMenu(
                             expanded = showBatchExportMenu,
                             onDismissRequest = { showBatchExportMenu = false },
                         ) {
                             DropdownMenuItem(
-                                text = { Text("Default") },
+                                text = { Text("默认命名") },
                                 onClick = {
                                     val groups = buildSelectedGroup()
                                     if (groups.isNotEmpty()) {
@@ -486,7 +486,7 @@ fun DownloadDetailPage(
                                 }
                             )
                             DropdownMenuItem(
-                                text = { Text("With Owner Prefix") },
+                                text = { Text("博主前缀命名") },
                                 onClick = {
                                     val groups = buildSelectedGroup()
                                     if (groups.isNotEmpty()) {

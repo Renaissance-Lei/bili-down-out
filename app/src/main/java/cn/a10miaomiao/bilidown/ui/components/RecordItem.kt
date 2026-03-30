@@ -41,6 +41,7 @@ import coil.compose.AsyncImage
 @Composable
 fun RecordItem(
     title: String,
+    ownerName: String = "",
     cover: String,
     status: Int,
     isSelectionMode: Boolean = false,
@@ -122,9 +123,16 @@ fun RecordItem(
                                 -1 -> "导出文件已被删除"
                                 else -> "未导出"
                             }
+                            val detailText = buildString {
+                                if (ownerName.isNotBlank()) {
+                                    append(ownerName)
+                                    append(" · ")
+                                }
+                                append(statusText)
+                            }
                             Text(
                                 modifier = Modifier.weight(1f),
-                                text = statusText,
+                                text = detailText,
                                 color = if (status >= 0) {
                                     MaterialTheme.colorScheme.outline
                                 } else {

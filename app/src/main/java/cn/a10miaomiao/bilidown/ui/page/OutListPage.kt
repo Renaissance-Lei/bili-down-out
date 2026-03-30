@@ -65,6 +65,8 @@ import cn.a10miaomiao.bilidown.service.BiliDownService
 import cn.a10miaomiao.bilidown.state.TaskStatus
 import cn.a10miaomiao.bilidown.ui.components.OutFolderDialog
 import cn.a10miaomiao.bilidown.ui.components.RecordItem
+import cn.a10miaomiao.bilidown.ui.components.SearchScope
+import cn.a10miaomiao.bilidown.ui.components.SearchScopeSelector
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -151,8 +153,7 @@ fun OutListPagePresenter(
                     context.startActivity(intent)
                 } else {
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(context, "视频文件不存在", Toast.LENGTH_SHORT)
-                            .show()
+                        Toast.makeText(context, "视频文件不存在", Toast.LENGTH_SHORT).show()
                     }
                 }
             }
@@ -194,7 +195,7 @@ internal fun ReconfirmDeleteDialog(
             },
             text = {
                 Column {
-                    Text("删除：$title")
+                    Text("删除对象：$title")
                     if (action.isDeleteFile) {
                         Text(
                             color = Color.Red,
@@ -242,6 +243,7 @@ fun OutListPage(
 
     var searchQuery by remember { mutableStateOf("") }
     var isSearchVisible by remember { mutableStateOf(false) }
+    var searchScope by remember { mutableStateOf(SearchScope()) }
     val keyboardController = LocalSoftwareKeyboardController.current
 
     var isSelectionMode by remember { mutableStateOf(false) }
@@ -252,14 +254,9 @@ fun OutListPage(
         selectedItems.clear()
     }
 
-    val filteredList = remember(state.recordList, searchQuery) {
-        if (searchQuery.isBlank()) {
-            state.recordList
-        } else {
-            state.recordList.filter {
-                it.title.contains(searchQuery, ignoreCase = true) ||
-                    it.ownerName.contains(searchQuery, ignoreCase = true)
-            }
+    val filteredList = remember(state.recordList, searchQuery, searchScope) {
+        state.recordList.filter {
+            searchScope.matches(searchQuery, it.title, it.ownerName)
         }
     }
 
@@ -298,31 +295,38 @@ fun OutListPage(
 
     Column(modifier = Modifier.fillMaxSize()) {
         if (isSearchVisible) {
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 10.dp, vertical = 4.dp),
-                placeholder = { Text("搜索已导出视频...") },
-                leadingIcon = {
-                    Icon(Icons.Filled.Search, contentDescription = "搜索")
-                },
-                trailingIcon = {
-                    IconButton(onClick = {
-                        searchQuery = ""
-                        isSearchVisible = false
-                        keyboardController?.hide()
-                    }) {
-                        Icon(Icons.Filled.Close, contentDescription = "关闭搜索")
-                    }
-                },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(
-                    onSearch = { keyboardController?.hide() }
-                ),
-            )
+            Column {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                    placeholder = { Text("搜索已导出视频或博主") },
+                    leadingIcon = {
+                        Icon(Icons.Filled.Search, contentDescription = "搜索")
+                    },
+                    trailingIcon = {
+                        IconButton(onClick = {
+                            searchQuery = ""
+                            isSearchVisible = false
+                            keyboardController?.hide()
+                        }) {
+                            Icon(Icons.Filled.Close, contentDescription = "关闭搜索")
+                        }
+                    },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(
+                        onSearch = { keyboardController?.hide() }
+                    ),
+                )
+                SearchScopeSelector(
+                    scope = searchScope,
+                    onScopeChange = { searchScope = it },
+                    modifier = Modifier.padding(bottom = 4.dp),
+                )
+            }
         }
 
         Box(modifier = Modifier.weight(1f)) {
@@ -349,12 +353,12 @@ fun OutListPage(
                             } else {
                                 Image(
                                     painter = painterResource(id = R.drawable.ic_movie_pay_area_limit),
-                                    contentDescription = "空空如也",
+                                    contentDescription = "空列表",
                                     modifier = Modifier.size(150.dp, 150.dp)
                                 )
                                 Text(
                                     modifier = Modifier.padding(vertical = 8.dp),
-                                    text = "空空如也",
+                                    text = "暂无导出记录",
                                 )
                             }
                         }
@@ -405,6 +409,7 @@ fun OutListPage(
                     items(filteredList, { it.id!! }) { item ->
                         RecordItem(
                             title = item.title,
+                            ownerName = item.ownerName,
                             cover = item.cover,
                             status = item.status,
                             isSelectionMode = isSelectionMode,
@@ -471,7 +476,8 @@ fun OutListPage(
                     ) {
                         val totalCount = filteredList.size
                         val selectedCount = selectedItems.size
-                        val isAllSelected = totalCount > 0 && selectedCount >= totalCount
+                        val isAllSelected = totalCount > 0 &&
+                            filteredList.all { item -> selectedItems.containsKey(item.entryDirPath) }
 
                         TextButton(
                             onClick = {
@@ -484,9 +490,7 @@ fun OutListPage(
                                 }
                             }
                         ) {
-                            Text(
-                                text = if (isAllSelected) "取消全选" else "全选"
-                            )
+                            Text(text = if (isAllSelected) "取消全选" else "全选")
                         }
 
                         Spacer(modifier = Modifier.width(8.dp))
@@ -545,7 +549,7 @@ fun OutListPage(
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("删文件")
+                            Text("删除文件")
                         }
                     }
                 }
