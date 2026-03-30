@@ -172,7 +172,8 @@ fun DownloadDetailPagePresenter(
                 cid = item.cid,
                 id = item.id,
                 type = item.type,
-                items = items
+                items = items,
+                ownerName = biliEntry.owner_name.orEmpty(),
             )
         }
     }
@@ -298,7 +299,7 @@ fun DownloadDetailPage(
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                bottom = if (isSelectionMode) 80.dp else 0.dp
+                bottom = if (isSelectionMode) 160.dp else 80.dp
             )
         ) {
             val detailInfo = state.detailInfo
@@ -350,6 +351,7 @@ fun DownloadDetailPage(
             Surface(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
+                    .padding(bottom = 80.dp)
                     .fillMaxWidth(),
                 shadowElevation = 8.dp,
                 color = MaterialTheme.colorScheme.surface,

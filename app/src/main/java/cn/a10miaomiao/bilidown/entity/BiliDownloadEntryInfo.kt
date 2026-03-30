@@ -29,6 +29,7 @@ data class BiliDownloadEntryInfo(
     val spid: Long? = null,
     val bvid: String? = null,
     val owner_id: Long? = null,
+    val owner_name: String? = null,
     var page_data: PageInfo? = null,
     val season_id: String? = null,
     val source: SourceInfo? = null,

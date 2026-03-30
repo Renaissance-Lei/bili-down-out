@@ -328,7 +328,7 @@ fun OutListPage(
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
-                    bottom = if (isSelectionMode) 88.dp else 80.dp
+                    bottom = if (isSelectionMode) 168.dp else 80.dp
                 ),
             ) {
                 if (state.recordList.isEmpty()) {
@@ -457,6 +457,7 @@ fun OutListPage(
                 Surface(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
+                        .padding(bottom = 80.dp)
                         .fillMaxWidth(),
                     shadowElevation = 8.dp,
                     color = MaterialTheme.colorScheme.surface,

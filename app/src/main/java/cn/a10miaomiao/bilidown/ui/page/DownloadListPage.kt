@@ -202,7 +202,8 @@ fun DownloadListPagePresenter(
                             cid = cid,
                             id = id,
                             type = type,
-                            items = mutableListOf(item)
+                            items = mutableListOf(item),
+                            ownerName = biliEntry.owner_name.orEmpty(),
                         )
                     )
                 }
@@ -317,6 +318,7 @@ fun DownloadListPage(
         } else {
             state.list.filter { info ->
                 info.title.contains(searchQuery, ignoreCase = true)
+                    || info.ownerName.contains(searchQuery, ignoreCase = true)
             }
         }
     }
@@ -522,7 +524,7 @@ fun DownloadListPage(
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(
-                            bottom = if (isSelectionMode) 80.dp else 80.dp
+                            bottom = if (isSelectionMode) 160.dp else 80.dp
                         ),
                     ) {
                         // 搜索按钮 + 视频总数
@@ -605,6 +607,7 @@ fun DownloadListPage(
                 Surface(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
+                        .padding(bottom = 80.dp)
                         .fillMaxWidth(),
                     shadowElevation = 8.dp,
                     color = MaterialTheme.colorScheme.surface,

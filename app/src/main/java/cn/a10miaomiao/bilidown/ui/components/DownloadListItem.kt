@@ -1,9 +1,16 @@
 package cn.a10miaomiao.bilidown.ui.components
 
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
@@ -44,7 +51,7 @@ fun DownloadListItem(
                 MaterialTheme.colorScheme.secondaryContainer
             }
         ) {
-            Column() {
+            Column {
                 Row(
                     modifier = Modifier
                         .combinedClickable(
@@ -55,9 +62,7 @@ fun DownloadListItem(
                                     onClick()
                                 }
                             },
-                            onLongClick = {
-                                onLongClick()
-                            }
+                            onLongClick = onLongClick,
                         )
                         .padding(10.dp)
                         .fillMaxWidth(),
@@ -71,6 +76,7 @@ fun DownloadListItem(
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                     }
+
                     AsyncImage(
                         model = UrlUtil.autoHttps(item.cover) + "@672w_378h_1c_",
                         contentDescription = item.title,
@@ -97,8 +103,15 @@ fun DownloadListItem(
                         } else {
                             "暂停中"
                         }
+                        val detailText = buildString {
+                            if (item.ownerName.isNotBlank()) {
+                                append(item.ownerName)
+                                append(" · ")
+                            }
+                            append("${item.items.size}个视频 · $status")
+                        }
                         Text(
-                            text = "${item.items.size}个视频 • $status",
+                            text = detailText,
                             maxLines = 1,
                             color = MaterialTheme.colorScheme.outline,
                             overflow = TextOverflow.Ellipsis,
@@ -114,7 +127,9 @@ fun DownloadListItem(
 @Composable
 fun DownloadListItemPreview() {
     DownloadListItem(
-        item = DownloadInfo("", 1,
+        item = DownloadInfo(
+            "",
+            1,
             has_dash_audio = true,
             is_completed = true,
             total_bytes = 0L,
@@ -124,7 +139,8 @@ fun DownloadListItemPreview() {
             id = 0L,
             cid = 0L,
             type = DownloadType.VIDEO,
-            items = mutableListOf()
+            items = mutableListOf(),
+            ownerName = "测试UP主",
         ),
         onClick = {}
     )
