@@ -54,7 +54,9 @@ private fun <T> rememberPresenterState(
 }
 
 private class ActionViewModel<T> : ViewModel() {
-    val channel = Channel<T>()
+    // 页面事件大多通过 trySend() 触发，使用缓冲通道避免首次点击在 Presenter
+    // 还未重新挂起接收时被直接丢弃。
+    val channel = Channel<T>(Channel.BUFFERED)
     val pair = channel to channel.consumeAsFlow()
     override fun onCleared() {
         channel.close()
@@ -119,7 +121,7 @@ inline fun <reified T, reified E> rememberPresenter(
 fun <T, E> rememberNestedPresenter(
     body: @Composable (flow: Flow<E>) -> T
 ): Pair<T, Channel<E>> {
-    val channel = remember { Channel<E>() }
+    val channel = remember { Channel<E>(Channel.BUFFERED) }
     val flow = remember { channel.consumeAsFlow() }
     val presenter = body(flow)
     return presenter to channel
