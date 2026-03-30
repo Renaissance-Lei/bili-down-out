@@ -1,6 +1,7 @@
 package cn.a10miaomiao.bilidown.ui.components
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,9 +9,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -34,12 +37,17 @@ import cn.a10miaomiao.bilidown.common.UrlUtil
 import cn.a10miaomiao.bilidown.db.dao.OutRecord
 import coil.compose.AsyncImage
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun RecordItem(
     title: String,
     cover: String,
     status: Int,
+    isSelectionMode: Boolean = false,
+    isSelected: Boolean = false,
     onClick: () -> Unit,
+    onLongClick: () -> Unit = {},
+    onSelectToggle: () -> Unit = {},
     onDeleteClick: (isDeleteFile: Boolean) -> Unit,
 ) {
     var expandedMoreMenu by remember { mutableStateOf(false) }
@@ -50,16 +58,38 @@ fun RecordItem(
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(10.dp),
-            color = MaterialTheme.colorScheme.secondaryContainer
+            color = if (isSelected) {
+                MaterialTheme.colorScheme.primaryContainer
+            } else {
+                MaterialTheme.colorScheme.secondaryContainer
+            }
         ) {
-            Column() {
+            Column {
                 Row(
                     modifier = Modifier
-                        .clickable(onClick = onClick)
+                        .combinedClickable(
+                            onClick = {
+                                if (isSelectionMode) {
+                                    onSelectToggle()
+                                } else {
+                                    onClick()
+                                }
+                            },
+                            onLongClick = onLongClick,
+                        )
                         .padding(10.dp)
                         .fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    if (isSelectionMode) {
+                        Checkbox(
+                            checked = isSelected,
+                            onCheckedChange = { onSelectToggle() },
+                            modifier = Modifier.size(48.dp)
+                        )
+                        Box(modifier = Modifier.width(4.dp))
+                    }
+
                     AsyncImage(
                         model = UrlUtil.autoHttps(cover) + "@672w_378h_1c_",
                         contentDescription = title,
@@ -88,14 +118,13 @@ fun RecordItem(
                             val statusText = when (status) {
                                 OutRecord.STATUS_WAIT -> "队列中"
                                 OutRecord.STATUS_SUCCESS -> "已导出"
-                                OutRecord.STATUS_FAIL -> "导出出现异常"
+                                OutRecord.STATUS_FAIL -> "导出异常"
                                 -1 -> "导出文件已被删除"
                                 else -> "未导出"
                             }
                             Text(
                                 modifier = Modifier.weight(1f),
                                 text = statusText,
-//                                maxLines = 1,
                                 color = if (status >= 0) {
                                     MaterialTheme.colorScheme.outline
                                 } else {
@@ -103,33 +132,35 @@ fun RecordItem(
                                 },
                                 overflow = TextOverflow.Ellipsis,
                             )
-                            Box() {
-                                IconButton(
-                                    onClick = { expandedMoreMenu = true }
-                                ) {
-                                    Icon(Icons.Filled.MoreVert, null)
-                                }
-                                val menus = remember<List<String>>(status) {
-                                    if (status == OutRecord.STATUS_SUCCESS) {
-                                        listOf("删除记录", "删除记录及文件")
-                                    } else {
-                                        listOf("移除任务")
+                            if (!isSelectionMode) {
+                                Box {
+                                    IconButton(
+                                        onClick = { expandedMoreMenu = true }
+                                    ) {
+                                        Icon(Icons.Filled.MoreVert, null)
                                     }
-                                }
-                                DropdownMenu(
-                                    expanded = expandedMoreMenu,
-                                    onDismissRequest = { expandedMoreMenu = false },
-                                ) {
-                                    menus.forEachIndexed { index, text ->
-                                        DropdownMenuItem(
-                                            onClick = {
-                                                expandedMoreMenu = false
-                                                onDeleteClick(index == 1)
-                                            },
-                                            text = {
-                                                Text(text = text)
-                                            }
-                                        )
+                                    val menus = remember<List<String>>(status) {
+                                        if (status == OutRecord.STATUS_SUCCESS) {
+                                            listOf("删除记录", "删除记录及文件")
+                                        } else {
+                                            listOf("移除任务")
+                                        }
+                                    }
+                                    DropdownMenu(
+                                        expanded = expandedMoreMenu,
+                                        onDismissRequest = { expandedMoreMenu = false },
+                                    ) {
+                                        menus.forEachIndexed { index, text ->
+                                            DropdownMenuItem(
+                                                onClick = {
+                                                    expandedMoreMenu = false
+                                                    onDeleteClick(index == 1)
+                                                },
+                                                text = {
+                                                    Text(text = text)
+                                                }
+                                            )
+                                        }
                                     }
                                 }
                             }

@@ -717,6 +717,31 @@ class BiliDownService :
         }
     }
 
+    suspend fun delTasks(
+        tasks: List<OutRecord>,
+        isDeleteFile: Boolean,
+    ) {
+        if (tasks.isEmpty()) {
+            return
+        }
+        val outRecordDao = appDatabase.outRecordDao()
+        tasks.forEach { task ->
+            if (isDeleteFile) {
+                val outFile = File(task.outFilePath)
+                if (outFile.exists()) {
+                    outFile.delete()
+                }
+            }
+            outRecordDao.delete(task)
+        }
+        val message = if (isDeleteFile) {
+            "已删除 ${tasks.size} 条记录及文件"
+        } else {
+            "已删除 ${tasks.size} 条记录"
+        }
+        toast(message)
+    }
+
     private suspend fun toast(message: String) {
         val duration = if (message.length > 10) {
             Toast.LENGTH_LONG
