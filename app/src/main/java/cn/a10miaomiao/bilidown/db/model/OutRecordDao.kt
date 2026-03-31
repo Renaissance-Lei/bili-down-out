@@ -15,6 +15,9 @@ interface OutRecordDao {
     @Query("SELECT * FROM out_record WHERE status=:status order by update_time desc")
     suspend fun getAllByStatus(status: Int): List<OutRecord>
 
+    @Query("SELECT * FROM out_record WHERE status=:status order by update_time desc LIMIT 1")
+    suspend fun getFirstByStatus(status: Int): OutRecord?
+
     @Query("SELECT * FROM out_record WHERE input_path IN (:entryDirPaths)")
     suspend fun getAllByEntryDirPaths(entryDirPaths: Array<String>): List<OutRecord>
 

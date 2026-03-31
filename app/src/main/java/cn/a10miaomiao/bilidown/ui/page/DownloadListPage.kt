@@ -43,6 +43,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -76,9 +77,15 @@ import cn.a10miaomiao.bilidown.ui.components.SearchScopeSelector
 import cn.a10miaomiao.bilidown.ui.components.SwipeToRefresh
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import rikka.shizuku.ShizukuProvider
+
+// 调大后下拉刷新的转圈会停留更久，更容易感知到刷新已触发；
+// 调小后界面会更利落，但在读取很快时可能看起来像没有刷新。
+private const val MIN_REFRESH_INDICATOR_DURATION_MS = 400L
 
 data class DownloadListPageState(
     val list: List<DownloadInfo>,
@@ -240,8 +247,14 @@ fun DownloadListPagePresenter(
         when (it) {
             is DownloadListPageAction.RefreshList -> {
                 refreshing = true
+                val refreshStartTime = System.currentTimeMillis()
                 withContext(Dispatchers.IO) {
                     getList(it.packageName, it.enabledShizuku)
+                }
+                val remainingDuration = MIN_REFRESH_INDICATOR_DURATION_MS -
+                    (System.currentTimeMillis() - refreshStartTime)
+                if (remainingDuration > 0) {
+                    delay(remainingDuration)
                 }
                 refreshing = false
             }
@@ -319,6 +332,7 @@ fun DownloadListPage(
     var isSearchVisible by remember { mutableStateOf(false) }
     var searchScope by remember { mutableStateOf(SearchScope()) }
     val keyboardController = LocalSoftwareKeyboardController.current
+    val coroutineScope = rememberCoroutineScope()
 
     var isSelectionMode by remember { mutableStateOf(false) }
     var showBatchExportMenu by remember { mutableStateOf(false) }
@@ -438,12 +452,14 @@ fun DownloadListPage(
             SwipeToRefresh(
                 refreshing = state.refreshing,
                 onRefresh = {
-                    channel.trySend(
-                        DownloadListPageAction.RefreshList(
-                            packageName = packageName,
-                            enabledShizuku = shizukuPermissionState.isEnabled,
+                    coroutineScope.launch {
+                        channel.send(
+                            DownloadListPageAction.RefreshList(
+                                packageName = packageName,
+                                enabledShizuku = shizukuPermissionState.isEnabled,
+                            )
                         )
-                    )
+                    }
                 },
             ) {
                 if (state.list.isEmpty()) {

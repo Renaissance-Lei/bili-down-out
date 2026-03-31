@@ -86,11 +86,7 @@ class BiliDownService :
             appState.taskStatus.collect {
                 if (it is TaskStatus.InIdle) {
                     // 空闲状态，进行下一个任务
-                    val waitRecords = appDatabase.outRecordDao()
-                        .getAllByStatus(OutRecord.STATUS_WAIT)
-                    if (waitRecords.isNotEmpty()) {
-                        startTask(waitRecords.first())
-                    }
+                    startNextWaitTaskIfIdle()
                 }
             }
         }
@@ -640,6 +636,16 @@ class BiliDownService :
         }
     }
 
+    private suspend fun startNextWaitTaskIfIdle() {
+        if (appState.taskStatus.value != TaskStatus.InIdle) {
+            return
+        }
+        val waitTask = appDatabase.outRecordDao()
+            .getFirstByStatus(OutRecord.STATUS_WAIT)
+            ?: return
+        startTask(waitTask)
+    }
+
     suspend fun addTask(
         entryDirPath: String,
         outFilePath: String,
@@ -663,6 +669,7 @@ class BiliDownService :
                 updateTime = currentTime,
             )
             outRecordDao.insertAll(newRecord)
+            startNextWaitTaskIfIdle()
             toast("成功创建任务：${title}")
         } else {
             if (record.status == OutRecord.STATUS_SUCCESS) {
@@ -699,6 +706,9 @@ class BiliDownService :
             } else {
                 skippedCount++
             }
+        }
+        if (addedCount > 0) {
+            startNextWaitTaskIfIdle()
         }
         if (addedCount > 0) {
             val msg = if (skippedCount > 0) {
